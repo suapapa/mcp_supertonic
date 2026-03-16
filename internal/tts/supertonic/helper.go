@@ -605,7 +605,7 @@ func LoadVoiceStyle(voiceStylePaths []string, verbose bool) (*Style, error) {
 	}
 
 	if verbose {
-		fmt.Printf("Loaded %d voice styles\n\n", bsz)
+		fmt.Fprintf(os.Stderr, "Loaded %d voice styles\n\n", bsz)
 	}
 
 	return &Style{
@@ -981,10 +981,10 @@ func extractWavSegment(wav []float32, duration float32, sampleRate int, index in
 // Timer measures execution time
 func Timer(name string, fn func() interface{}) interface{} {
 	start := time.Now()
-	fmt.Printf("%s...\n", name)
+	fmt.Fprintf(os.Stderr, "%s...\n", name)
 	result := fn()
 	elapsed := time.Since(start).Seconds()
-	fmt.Printf("  -> %s completed in %.2f sec\n", name, elapsed)
+	fmt.Fprintf(os.Stderr, "  -> %s completed in %.2f sec\n", name, elapsed)
 	return result
 }
 

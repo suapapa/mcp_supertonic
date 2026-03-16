@@ -28,7 +28,7 @@ func NewDefaultParameters() *Parameters {
 
 	onnxDir := filepath.Join(baseDir, "onnx")
 	voiceStyleDir := filepath.Join(baseDir, "voice_styles")
-	voiceStyle := "F5.json"
+	voiceStyle := "F1.json"
 
 	// Fallback to relative path if absolute path does not exist
 	if _, err := os.Stat(onnxDir); err != nil {
@@ -112,25 +112,8 @@ func (e *TTS) Close() {
 }
 
 func (e *TTS) EncodeWavIO(w io.WriteSeeker, text string) error {
-	wav, duration, err := e.textToSpeech.Call(text, e.params.Langs[0], e.voiceStyle, e.params.TotalStep, e.params.Speed, e.params.SilenceDuration)
-	if err != nil {
-		return fmt.Errorf("error generating speech: %w", err)
-	}
-
-	var wavOut []float64
-
-	// For non-batch mode, wav is a single concatenated audio
-	wavLen := int(float32(e.textToSpeech.SampleRate) * duration)
-	wavOut = make([]float64, wavLen)
-	for j := 0; j < wavLen && j < len(wav); j++ {
-		wavOut[j] = float64(wav[j])
-	}
-
-	if err := writeWavFileIO(w, wavOut, e.textToSpeech.SampleRate); err != nil {
-		return fmt.Errorf("error writing wav file: %w", err)
-	}
-
-	return nil
+	_, err := e.EncodeWavIOWithStyle(w, text, e.params.Langs[0], e.params.Speed, e.voiceStyle)
+	return err
 }
 
 func (e *TTS) BatchEncodeToFiles(saveDir string, texts []string) error {

@@ -15,16 +15,24 @@ import (
 	"github.com/suapapa/mcp_supertonic/internal/tts/supertonic"
 )
 
-var (
-	styleCache = make(map[string]*supertonic.Style)
-	cacheMu    sync.Mutex
-)
+type StyleCache struct {
+	cache    map[string]*supertonic.Style
+	mu       sync.Mutex
+	voiceDir string
+}
 
-func getStyle(voice string, voiceDir string) (*supertonic.Style, error) {
-	cacheMu.Lock()
-	defer cacheMu.Unlock()
+func NewStyleCache(voiceDir string) *StyleCache {
+	return &StyleCache{
+		cache:    make(map[string]*supertonic.Style),
+		voiceDir: voiceDir,
+	}
+}
 
-	if style, ok := styleCache[voice]; ok {
+func (c *StyleCache) Get(voice string) (*supertonic.Style, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if style, ok := c.cache[voice]; ok {
 		return style, nil
 	}
 
@@ -32,9 +40,8 @@ func getStyle(voice string, voiceDir string) (*supertonic.Style, error) {
 	if !strings.HasSuffix(voiceFile, ".json") {
 		voiceFile = voiceFile + ".json"
 	}
-	stylePath := filepath.Join(voiceDir, voiceFile)
+	stylePath := filepath.Join(c.voiceDir, voiceFile)
 
-	// Check if file exists
 	if _, err := os.Stat(stylePath); err != nil {
 		return nil, fmt.Errorf("voice style file not found: %s", stylePath)
 	}
@@ -44,14 +51,14 @@ func getStyle(voice string, voiceDir string) (*supertonic.Style, error) {
 		return nil, err
 	}
 
-	styleCache[voice] = style
+	c.cache[voice] = style
 	return style, nil
 }
 
-func closeStyles() {
-	cacheMu.Lock()
-	defer cacheMu.Unlock()
-	for _, style := range styleCache {
+func (c *StyleCache) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, style := range c.cache {
 		style.Destroy()
 	}
 }
@@ -59,8 +66,8 @@ func closeStyles() {
 func main() {
 	// 1. Initialize Supertonic TTS engine
 	params := supertonic.NewDefaultParameters()
-	params.TotalStep = 32 // Consistent with previous tests or for balance
-	params.Speed = 1.05
+	params.TotalStep = 24 // Consistent with previous tests or for balance
+	params.Speed = 1.3
 	params.SilenceDuration = 0.3
 
 	engine, err := supertonic.NewTTS(params)
@@ -68,10 +75,12 @@ func main() {
 		log.Fatalf("Failed to initialize Supertonic TTS: %v", err)
 	}
 	defer engine.Close()
-	defer closeStyles()
+
+	styleManager := NewStyleCache(params.VoiceStyleDir)
+	defer styleManager.Close()
 
 	// 2. Create MCP server
-	s := server.NewMCPServer("supertonic-tts", "1.0.0")
+	s := server.NewMCPServer("supertonic-tts", "1.0.1")
 
 	// 3. Define and Register Tool
 	synthTool := mcp.NewTool("synthesize_speech",
@@ -93,8 +102,8 @@ func main() {
 			mcp.DefaultString(""),
 		),
 		mcp.WithNumber("speed",
-			mcp.Description("speed rate to synthesize speech (e.g., 1.0)"),
-			mcp.DefaultNumber(1.0),
+			mcp.Description("speed rate to synthesize speech (e.g., 1.3)"),
+			mcp.DefaultNumber(1.3),
 		),
 	)
 
@@ -117,7 +126,7 @@ func main() {
 		defer f.Close()
 
 		// Load or get cached style
-		style, err := getStyle(voice, params.VoiceStyleDir)
+		style, err := styleManager.Get(voice)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to load voice style '%s': %v", voice, err)), nil
 		}
