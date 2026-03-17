@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
@@ -116,6 +117,132 @@ func (e *TTS) EncodeWavIO(w io.WriteSeeker, text string) error {
 	return err
 }
 
+func (e *TTS) EncodeWavIOWithStyle(w io.WriteSeeker, text string, lang string, speed float32, style *Style) (float32, error) {
+	if lang == "" {
+		lang = guessLang(text)
+	}
+
+	wav, duration, err := e.textToSpeech.Call(text, lang, style, e.params.TotalStep, speed, e.params.SilenceDuration)
+	if err != nil {
+		return 0, fmt.Errorf("error generating speech: %w", err)
+	}
+
+	var wavOut []float64
+
+	// For non-batch mode, wav is a single concatenated audio
+	wavLen := int(float32(e.textToSpeech.SampleRate) * duration)
+	wavOut = make([]float64, wavLen)
+	for j := 0; j < wavLen && j < len(wav); j++ {
+		wavOut[j] = float64(wav[j])
+	}
+
+	if err := writeWavFileIO(w, wavOut, e.textToSpeech.SampleRate); err != nil {
+		return 0, fmt.Errorf("error writing wav file: %w", err)
+	}
+
+	return duration, nil
+}
+
+func (e *TTS) BatchEncodeWavIOWithStyle(w []io.WriteSeeker, text string, lang string, speed float32, style *Style) ([]float32, error) {
+	bsz := len(w)
+	if bsz == 0 {
+		return nil, fmt.Errorf("no writers provided")
+	}
+
+	if lang == "" {
+		lang = guessLang(text)
+	}
+
+	// Create batch inputs
+	textList := make([]string, bsz)
+	langList := make([]string, bsz)
+	for i := 0; i < bsz; i++ {
+		textList[i] = text
+		langList[i] = lang
+	}
+
+	// Replicate style if needed
+	var runStyle *Style
+	var destroyStyle bool = false
+
+	ttlShape := style.TtlTensor.GetShape()
+	dpShape := style.DpTensor.GetShape()
+
+	if ttlShape[0] == 1 && dpShape[0] == 1 && bsz > 1 {
+		ttlData := style.TtlTensor.GetData()
+		dpData := style.DpTensor.GetData()
+
+		ttlSize := ttlShape[1] * ttlShape[2]
+		dpSize := dpShape[1] * dpShape[2]
+
+		newTtlData := make([]float32, int64(bsz)*ttlSize)
+		newDpData := make([]float32, int64(bsz)*dpSize)
+
+		for i := 0; i < bsz; i++ {
+			copy(newTtlData[int64(i)*ttlSize:], ttlData)
+			copy(newDpData[int64(i)*dpSize:], dpData)
+		}
+
+		newTtlShape := []int64{int64(bsz), ttlShape[1], ttlShape[2]}
+		newDpShape := []int64{int64(bsz), dpShape[1], dpShape[2]}
+
+		newTtlTensor, err := ort.NewTensor(newTtlShape, newTtlData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create replicated TTL tensor: %w", err)
+		}
+
+		newDpTensor, err := ort.NewTensor(newDpShape, newDpData)
+		if err != nil {
+			newTtlTensor.Destroy()
+			return nil, fmt.Errorf("failed to create replicated DP tensor: %w", err)
+		}
+
+		runStyle = &Style{
+			TtlTensor: newTtlTensor,
+			DpTensor:  newDpTensor,
+		}
+		destroyStyle = true
+	} else if int(ttlShape[0]) != bsz || int(dpShape[0]) != bsz {
+		return nil, fmt.Errorf("style batch size mismatch: style contains %d items, but requested batch size is %d", ttlShape[0], bsz)
+	} else {
+		runStyle = style
+	}
+
+	if destroyStyle {
+		defer runStyle.Destroy()
+	}
+
+	// Generate speech
+	wav, duration, err := e.textToSpeech.Batch(textList, langList, runStyle, e.params.TotalStep, speed)
+	if err != nil {
+		return nil, fmt.Errorf("error generating batch speech: %w", err)
+	}
+
+	// Save outputs in parallel
+	var wg sync.WaitGroup
+	errCh := make(chan error, bsz)
+
+	for i := 0; i < bsz; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			wavOut := extractWavSegment(wav, duration[idx], e.textToSpeech.SampleRate, idx, bsz)
+			if err := writeWavFileIO(w[idx], wavOut, e.textToSpeech.SampleRate); err != nil {
+				errCh <- fmt.Errorf("error writing wav to writer %d: %w", idx, err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	if len(errCh) > 0 {
+		return duration, <-errCh
+	}
+
+	return duration, nil
+}
+
 func (e *TTS) BatchEncodeToFiles(saveDir string, texts []string) error {
 	// --- 5. Synthesize speech --- //
 	if err := os.MkdirAll(saveDir, 0755); err != nil {
@@ -134,7 +261,7 @@ func (e *TTS) BatchEncodeToFiles(saveDir string, texts []string) error {
 
 	// Save outputs
 	for i := 0; i < len(texts); i++ {
-		fname := fmt.Sprintf("%s.wav", sanitizeFilename(texts[i], 20))
+		fname := fmt.Sprintf("%s.wav", SanitizeFilename(texts[i], 20))
 		var wavOut []float64
 
 		wavOut = extractWavSegment(wav, duration[i], e.textToSpeech.SampleRate, i, len(texts))

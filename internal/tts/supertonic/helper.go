@@ -940,8 +940,8 @@ func InitializeONNXRuntime() error {
 	return nil
 }
 
-// sanitizeFilename creates a safe filename from text (supports Unicode)
-func sanitizeFilename(text string, maxLen int) string {
+// SanitizeFilename creates a safe filename from text (supports Unicode)
+func SanitizeFilename(text string, maxLen int) string {
 	runes := []rune(text)
 	if len(runes) > maxLen {
 		runes = runes[:maxLen]
@@ -1068,4 +1068,27 @@ func IntArrayToTensor(array [][]int64, shape []int64) *ort.Tensor[int64] {
 	}
 
 	return tensor
+}
+
+func guessLang(text string) string {
+	for _, r := range text {
+		// Hangul Syllables (AC00-D7AF), Jamo (1100-11FF), Compatibility Jamo (3130-318F)
+		if (r >= 0xAC00 && r <= 0xD7AF) || (r >= 0x1100 && r <= 0x11FF) || (r >= 0x3130 && r <= 0x318F) {
+			return "ko"
+		}
+	}
+
+	// Smart guess for other AvailableLangs: es, pt, fr
+	for _, r := range text {
+		switch r {
+		case 'ñ', '¿', '¡':
+			return "es"
+		case 'è', 'ê', 'ë', 'î', 'ï', 'ô', 'û', 'ù', 'œ', 'æ':
+			return "fr"
+		case 'ã', 'õ':
+			return "pt"
+		}
+	}
+
+	return "en"
 }

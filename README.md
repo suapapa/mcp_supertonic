@@ -5,6 +5,7 @@ An MCP (Model Context Protocol) server for Supertonic Text-to-Speech (TTS) engin
 ## Features
 
 -   **`synthesize_speech` tool**: Convert text into `.wav` audio using available voice nodes.
+-   **`batch_synthesize_speech` tool**: Convert text into multiple audio files with variations in a batch for candidate selection.
 -   **Voice Styles**: Supports fully descriptive pre-trained voices like F1, M2 backends.
 -   **Cached Loading**: Optimizes weight reloading overhead on repeated synthesis requests.
 
@@ -78,9 +79,35 @@ To use this server with a client like **Claude Desktop** or **Cursor**, add the 
 
 ---
 
+### `batch_synthesize_speech`
+
+| Argument | Type | Description | Default |
+| :--- | :--- | :--- | :--- |
+| **`input_text`** (Required) | `string` | Text payload to synthesize. | - |
+| `batch_cnt` | `number` | Number of variations to generate (audio count). | `3` |
+| `voice` | `string` | Preset name such as `F1` or `M2`. | `F1` |
+| `lang` | `string` | Language code (`ko`, `en`, `es`, `pt`, `fr`). Leaves blank to auto-detect. | `""` (Auto) |
+| `speed` | `number` | Speed rate multiplier to synthesize speech (e.g., `1.0`). | `1.0` |
+
+---
+
+### `batch_synthesize_speech`
+
+| Argument | Type | Description | Default |
+| :--- | :--- | :--- | :--- |
+| **`input_text`** (Required) | `string` | Text payload to synthesize. | - |
+| `batch_cnt` | `number` | Number of variations to generate (audio count). | `3` |
+| `voice` | `string` | Preset name such as `F1` or `M2`. | `F1` |
+| `lang` | `string` | Language code (`ko`, `en`, `es`, `pt`, `fr`). Leaves blank to auto-detect. | `""` (Auto) |
+| `speed` | `number` | Speed rate multiplier to synthesize speech (e.g., `1.0`). | `1.0` |
+
+---
+
+---
+
 ## Usage Examples
 
-Here are three examples of how to call the `synthesize_speech` tool.
+Here are four examples of how to call the tools.
 
 ### 1. Basic Korean Synthesis (Default Voice)
 Synthesize Korean text using the default female voice (`F1`).
@@ -143,6 +170,37 @@ Synthesize Spanish text with automatic language detection using voice `F3`.
 }
 ```
 
+
+### 4. Batch Synthesis with Variations
+Generate multiple candidates of the same text with slight variations. The filenames are automatically generated from the input text (max 20 chars slug).
+
+**Arguments:**
+```json
+{
+  "input_text": "안녕하세요. 일괄 생성된 오디오입니다.",
+  "batch_cnt": 3
+}
+```
+
+**Response:**
+```json
+{
+  "saved_files": [
+    {
+      "path": "/Users/suapapa/ws_suapapa/mcp_supertonic/안녕하세요_1.wav",
+      "duration_seconds": 2.45
+    },
+    {
+      "path": "/Users/suapapa/ws_suapapa/mcp_supertonic/안녕하세요_2.wav",
+      "duration_seconds": 2.41
+    },
+    {
+      "path": "/Users/suapapa/ws_suapapa/mcp_supertonic/안녕하세요_3.wav",
+      "duration_seconds": 2.48
+    }
+  ]
+}
+```
 
 ---
 
