@@ -90,7 +90,7 @@ func main() {
 	defer styleManager.Close()
 
 	// 2. Create MCP server
-	s := server.NewMCPServer("supertonic-tts", "1.1.0")
+	s := server.NewMCPServer("supertonic-tts", "1.1.1")
 
 	// 3. Define and Register Tool
 	synthTool := mcp.NewTool("synthesize_speech",
@@ -186,6 +186,10 @@ func main() {
 			mcp.Description("speed rate to synthesize speech (e.g., 1.3)"),
 			mcp.DefaultNumber(*defSpeed),
 		),
+		mcp.WithString("output_dir",
+			mcp.Description("directory path to save output WAV files (e.g., outputs)"),
+			mcp.DefaultString("."),
+		),
 	)
 
 	s.AddTool(batchSynthTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -202,6 +206,12 @@ func main() {
 		voice := request.GetString("voice", *defVoice)
 		lang := request.GetString("lang", "")
 		speed := float32(request.GetFloat("speed", *defSpeed))
+		outputDir := request.GetString("output_dir", ".")
+
+		// Create output directory if it doesn't exist
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to create output directory '%s': %v", outputDir, err)), nil
+		}
 
 		// Load or get cached style
 		style, err := styleManager.Get(voice)
@@ -220,16 +230,17 @@ func main() {
 
 		for i := 0; i < batchCnt; i++ {
 			fname := fmt.Sprintf("%s_%d.wav", baseName, i+1)
-			f, err := os.Create(fname)
+			fpath := filepath.Join(outputDir, fname)
+			f, err := os.Create(fpath)
 			if err != nil {
 				// Clean up previous files
 				for j := 0; j < i; j++ {
 					files[j].Close()
 				}
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to create file '%s': %v", fname, err)), nil
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to create file '%s': %v", fpath, err)), nil
 			}
 			writers[i] = f
-			filenames[i] = fname
+			filenames[i] = fpath
 			files[i] = f
 		}
 

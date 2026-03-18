@@ -88,18 +88,7 @@ To use this server with a client like **Claude Desktop** or **Cursor**, add the 
 | `voice` | `string` | Preset name such as `F1` or `M2`. | `F1` |
 | `lang` | `string` | Language code (`ko`, `en`, `es`, `pt`, `fr`). Leaves blank to auto-detect. | `""` (Auto) |
 | `speed` | `number` | Speed rate multiplier to synthesize speech (e.g., `1.0`). | `1.0` |
-
----
-
-### `batch_synthesize_speech`
-
-| Argument | Type | Description | Default |
-| :--- | :--- | :--- | :--- |
-| **`input_text`** (Required) | `string` | Text payload to synthesize. | - |
-| `batch_cnt` | `number` | Number of variations to generate (audio count). | `3` |
-| `voice` | `string` | Preset name such as `F1` or `M2`. | `F1` |
-| `lang` | `string` | Language code (`ko`, `en`, `es`, `pt`, `fr`). Leaves blank to auto-detect. | `""` (Auto) |
-| `speed` | `number` | Speed rate multiplier to synthesize speech (e.g., `1.0`). | `1.0` |
+| `output_dir` | `string` | Directory path to save output WAV files. | `.` |
 
 ---
 
@@ -178,7 +167,8 @@ Generate multiple candidates of the same text with slight variations. The filena
 ```json
 {
   "input_text": "안녕하세요. 일괄 생성된 오디오입니다.",
-  "batch_cnt": 3
+  "batch_cnt": 3,
+  "output_dir": "outputs"
 }
 ```
 
