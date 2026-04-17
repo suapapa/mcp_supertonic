@@ -37,15 +37,26 @@ go install
 > This places the `mcp_supertonic` binary into your `~/go/bin` directory. Ensure this folder is in your system `PATH`.
 
 ### 2. Running
+
+#### Standard I/O Mode (Default)
 Run the binary normally. It operates in the Standard I/O mode, perfect for adding to local AI clients:
 
 ```bash
 mcp_supertonic
 ```
 
+#### SSE Network Mode (HTTP Server)
+If you want to deploy the server on a local or external network, you can start an SSE HTTP server by providing a port number:
+
+```bash
+mcp_supertonic -port 8080
+```
+This mode exposes the MCP over an SSE stream on `http://<IP_ADDRESS>:8080/sse` and the message endpoint on `/message`.
+
 ### Client Configuration
 
-To use this server with a client like **Claude Desktop** or **Cursor**, add the following snippet to your `mcpServers` configuration file (e.g., `claude_desktop_config.json`):
+#### For Standard I/O (Local Client)
+To use this server locally with a client like **Claude Desktop** or **Cursor**, add the following snippet to your `mcpServers` configuration file (e.g., `claude_desktop_config.json`):
 
 ```json
 {
@@ -62,6 +73,22 @@ To use this server with a client like **Claude Desktop** or **Cursor**, add the 
 
 > [!TIP]
 > Make sure `mcp_supertonic` is in your `PATH` (typically `~/go/bin`), or provide the absolute path to the binary.
+
+#### For SSE Network (Remote Client)
+For clients that support HTTP/SSE MCP connections, you typically configure them with the SSE URL instead of a command.
+
+Example configuration snippet:
+```json
+{
+  "mcpServers": {
+    "supertonic-tts-remote": {
+      "type": "sse",
+      "url": "http://<SERVER_IP>:8080/sse"
+    }
+  }
+}
+```
+Replace `<SERVER_IP>` with the IP address of the machine running `mcp_supertonic`.
 
 ---
 

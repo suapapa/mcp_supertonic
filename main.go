@@ -71,6 +71,7 @@ func main() {
 	defSpeed := flag.Float64("defaultSpeed", 1.3, "Default speed rate")
 	defSilenceDuration := flag.Float64("defaultSilenceDuration", 0.3, "Default silence duration")
 	defVoice := flag.String("defaultVoice", "F1", "Default voice style (e.g., F1, F5, M2)")
+	port := flag.Int("port", 0, "Port to start SSE server on. 0 means Stdio.")
 
 	flag.Parse()
 
@@ -281,7 +282,16 @@ func main() {
 	})
 
 	// 4. Start Server
-	if err := server.ServeStdio(s); err != nil {
-		log.Fatalf("Server error: %v", err)
+	if *port > 0 {
+		sseServer := server.NewSSEServer(s)
+		addr := fmt.Sprintf(":%d", *port)
+		log.Printf("Starting SSE server on %s", addr)
+		if err := sseServer.Start(addr); err != nil {
+			log.Fatalf("Server error: %v", err)
+		}
+	} else {
+		if err := server.ServeStdio(s); err != nil {
+			log.Fatalf("Server error: %v", err)
+		}
 	}
 }
