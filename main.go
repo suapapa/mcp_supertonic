@@ -357,7 +357,8 @@ func main() {
 
 	// 4. Start Server
 	if *port > 0 {
-		sseServer := server.NewSSEServer(s)
+		// Periodic JSON-RPC pings on the SSE stream prevent idle timeouts (proxies, LB, some clients).
+		sseServer := server.NewSSEServer(s, server.WithKeepAliveInterval(25*time.Second))
 		addr := fmt.Sprintf(":%d", *port)
 		log.Printf("Starting SSE server on %s", addr)
 		if err := sseServer.Start(addr); err != nil {
