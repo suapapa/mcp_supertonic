@@ -126,7 +126,7 @@ func main() {
 	// 3. Define and Register Tool
 	synthTool := mcp.NewTool("synthesize_speech",
 		mcp.WithDescription("Convert input text to a speech audio wav file and save it on the server. "+
-			"Over SSE, local paths are not visible to clients — use resource_uri with MCP resources/read or set embed_audio=true for inline base64."),
+			"Over SSE, local paths are not visible to clients — use resource_uri with MCP resources/read or embed_audio=true for audio_base64 in the JSON text."),
 		mcp.WithString("input_text",
 			mcp.Description("text to synthesize speech from"),
 			mcp.Required(),
@@ -148,7 +148,7 @@ func main() {
 			mcp.DefaultNumber(*defSpeed),
 		),
 		mcp.WithBoolean("embed_audio",
-			mcp.Description("if true, include the WAV in the tool result as MCP audio content (base64); also use for small files over SSE"),
+			mcp.Description("if true, include the WAV bytes as audio_base64 inside the JSON text result (Gemini/Vertex function responses do not accept audio/wav parts; use this or resource_uri)"),
 			mcp.DefaultBool(false),
 		),
 	)
@@ -192,10 +192,21 @@ func main() {
 			AudioSavedTo string  `json:"audio_saved_to"`
 			Duration     float32 `json:"duration_seconds"`
 			ResourceURI  string  `json:"resource_uri"`
+			AudioBase64  string  `json:"audio_base64,omitempty"`
+			MimeType     string  `json:"mime_type,omitempty"`
 		}{
 			AudioSavedTo: absPath,
 			Duration:     duration,
 			ResourceURI:  resourceURI,
+		}
+
+		if embedAudio {
+			raw, err := os.ReadFile(absPath)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to read output for embedding: %v", err)), nil
+			}
+			result.AudioBase64 = base64.StdEncoding.EncodeToString(raw)
+			result.MimeType = "audio/wav"
 		}
 
 		b, err := json.Marshal(result)
@@ -203,15 +214,7 @@ func main() {
 			return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal result: %v", err)), nil
 		}
 
-		jsonStr := string(b)
-		if embedAudio {
-			raw, err := os.ReadFile(absPath)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Failed to read output for embedding: %v", err)), nil
-			}
-			return mcp.NewToolResultAudio(jsonStr, base64.StdEncoding.EncodeToString(raw), "audio/wav"), nil
-		}
-		return mcp.NewToolResultText(jsonStr), nil
+		return mcp.NewToolResultText(string(b)), nil
 	})
 
 	batchSynthTool := mcp.NewTool("batch_synthesize_speech",
@@ -242,7 +245,7 @@ func main() {
 			mcp.DefaultString("."),
 		),
 		mcp.WithBoolean("embed_audio",
-			mcp.Description("if true and batch_cnt is 1, include the single WAV in the tool result as MCP audio; for batch_cnt>1 use resource_uri for each file"),
+			mcp.Description("if true and batch_cnt is 1, include WAV as audio_base64 in the JSON text result; for batch_cnt>1 use resource_uri for each file"),
 			mcp.DefaultBool(false),
 		),
 	)
@@ -329,20 +332,15 @@ func main() {
 		}
 
 		payload := struct {
-			SavedFiles []SavedFile `json:"saved_files"`
-			EmbedNote  string      `json:"embed_note,omitempty"`
+			SavedFiles  []SavedFile `json:"saved_files"`
+			EmbedNote   string      `json:"embed_note,omitempty"`
+			AudioBase64 string      `json:"audio_base64,omitempty"`
+			MimeType    string      `json:"mime_type,omitempty"`
 		}{SavedFiles: savedFiles}
 
 		if embedAudio && batchCnt > 1 {
 			payload.EmbedNote = "embed_audio only applies when batch_cnt is 1; use resource_uri with resources/read for each output."
 		}
-
-		b, err := json.Marshal(payload)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal result: %v", err)), nil
-		}
-
-		jsonStr := string(b)
 
 		if embedAudio && batchCnt == 1 {
 			abs0, _ := filepath.Abs(filenames[0])
@@ -350,9 +348,16 @@ func main() {
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("Failed to read output for embedding: %v", err)), nil
 			}
-			return mcp.NewToolResultAudio(jsonStr, base64.StdEncoding.EncodeToString(raw), "audio/wav"), nil
+			payload.AudioBase64 = base64.StdEncoding.EncodeToString(raw)
+			payload.MimeType = "audio/wav"
 		}
-		return mcp.NewToolResultText(jsonStr), nil
+
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to marshal result: %v", err)), nil
+		}
+
+		return mcp.NewToolResultText(string(b)), nil
 	})
 
 	// 4. Start Server
