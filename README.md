@@ -11,7 +11,17 @@ An MCP (Model Context Protocol) server for Supertonic Text-to-Speech (TTS) engin
 
 ## Prerequisites
 
-To run the Supertonic TTS engine, you must download the pre-trained model files (ONNX nodes) to `~/.local/share/supertonic2`. This can be done automatically using Go generate:
+Install ONNX Runtime C librairy:
+
+```sh
+wget https://github.com/microsoft/onnxruntime/releases/download/v1.25.0/onnxruntime-linux-aarch64-1.25.0.tgz
+tar -xzf onnxruntime-linux-x64-1.25.0.tgz
+sudo cp onnxruntime-linux-x64-1.25.0/lib/* /usr/local/lib/
+sudo cp -r onnxruntime-linux-x64-1.25.0/include/* /usr/local/include/
+sudo ldconfig
+```
+
+Download the pre-trained model files (ONNX nodes) to `~/.local/share/supertonic2`. This can be done automatically using Go generate:
 
 ```bash
 go generate
