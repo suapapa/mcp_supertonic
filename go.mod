@@ -1,6 +1,6 @@
 module github.com/suapapa/mcp_supertonic
 
-go 1.25.5
+go 1.27.0
 
 require (
 	github.com/go-audio/audio v1.0.0
